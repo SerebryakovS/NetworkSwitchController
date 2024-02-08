@@ -149,7 +149,7 @@ APIRequestsHandler() {
 
 Main(){
     SetupGPIO
-    socat TCP-LISTEN:$REST_PORT,fork,reuseaddr SYSTEM:"./Run.sh APIRequestsHandler"
+    socat TCP-LISTEN:$REST_PORT,fork,reuseaddr SYSTEM:"$SCRIPT_PATH APIRequestsHandler"
 };
 
 if [ $# -eq 0 ]; then

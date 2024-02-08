@@ -1,6 +1,14 @@
 # NetworkSwitchController
 Controller currenly deployed as systemd service for operation on SBC like OrangePI and also as external hardware solution based on STM32.
 
+### Software installation (systemd option)
+```
+# apt-get install socat jq
+# git clone https://github.com/SerebryakovS/NetworkSwitchController.git
+# cd NetworkSwitchController
+# bash Install.sh
+```
+
 ### General API calls
 Following API calls works for both controller implementations
 
