@@ -9,6 +9,12 @@ Controller currenly deployed as systemd service for operation on SBC like Orange
 # bash Install.sh
 ```
 
+### Troubleshooting
+```
+# /sbin/ifconfig
+# systemctl status nsc
+# systemctl restart nsc
+```
 ### General API calls
 Following API calls works for both controller implementations
 
