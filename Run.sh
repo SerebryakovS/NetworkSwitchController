@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source $(realpath ./PinDefine.sh)
+source $(dirname "$0")/PinDefine.sh
 SCRIPT_PATH=$(realpath "${BASH_SOURCE[0]}")
 REST_PORT=13222
 TOGGLE_TIME=5
