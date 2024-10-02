@@ -21,15 +21,15 @@
 # +------+-----+----------+--------+---+   OPI5   +---+--------+----------+-----+------+
 
 ##############
-RELAY_1_PIN=0
-RELAY_2_PIN=1
-RELAY_3_PIN=2
-RELAY_4_PIN=5
+RELAY_1_PIN=5
+RELAY_2_PIN=7
+RELAY_3_PIN=3
+RELAY_4_PIN=4
 #-------------
-INPUT_1_PIN=7
-INPUT_2_PIN=8
-INPUT_3_PIN=11
-INPUT_4_PIN=12
+INPUT_1_PIN=6
+INPUT_2_PIN=9
+INPUT_3_PIN=10
+INPUT_4_PIN=13
 ##############
 TOGGLE_TIME=5
 
