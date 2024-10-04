@@ -68,14 +68,6 @@ ReadInputPin() { # gpio is pulled-up, so logic is inverted
     fi;
 };
 
-ValidateRelayNum() {
-    if [ $1 -ge 1 ] && [ $1 -le 4 ]; then
-        echo "true"
-    else
-        echo "false"
-    fi;
-};
-
 ReadAllInputsJson() {
     echo $(
         for PinNum in 1 2 3 4; do
@@ -83,5 +75,5 @@ ReadAllInputsJson() {
             InputPinState=$(ReadInputPin "${!InputPin}")
             echo "{\"input_num\": $PinNum, \"state\": $InputPinState}"
         done | jq -s '.'
-    )
-}
+    );
+};

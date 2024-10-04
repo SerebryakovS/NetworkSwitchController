@@ -67,24 +67,12 @@ response body for all above requests:
     "success" : true | false,
 }
 ```
-### Systemd Controller specific feature
-In order to prevent a huge amount of client requests for just checking input values, additional Web-socket server works on port 13223. It's used for read-only.
-Each time one of input pins changes it's value client would be informed over ws connection.
-```
-$ websocat ws://IP:WS_PORT --ping-interval=1 -v
-    INFO  websocat::lints Auto-inserting the line mode
-    INFO  websocat::stdio_threaded_peer get_stdio_peer (threaded)
-    INFO  websocat::ws_client_peer get_ws_client_peer
-    INFO  websocat::ws_client_peer Connected to ws
-    INFO  websocat::ws_peer Sending WebSocket ping
-    INFO  websocat::ws_peer Received a pong from websocket; RTT = 780.778µs
-    INFO  websocat::ws_peer Sending WebSocket ping
-    INFO  websocat::ws_peer Received a pong from websocket; RTT = 834.153µs
-    INFO  websocat::ws_peer Sending WebSocket ping
-    INFO  websocat::ws_peer Received a pong from websocket; RTT = 801.779µs
-    INFO  websocat::ws_peer Sending WebSocket ping
-    INFO  websocat::ws_peer Received a pong from websocket; RTT = 779.32µs
-```
-### STM32 Controller specific requests
 
-#### POST /api/upload_firmware
+
+
+
+
+sudo apt-get update
+sudo apt-get install -y gpiod libgpiod-dev
+
+gcc Main.c GlueHandlers.c -o out -lgpiod
