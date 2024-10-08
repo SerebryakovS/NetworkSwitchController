@@ -6,8 +6,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <string.h>
 
-#define REST_PORT 8112
+#define REST_PORT         8112
+#define WEB_RESPONSE_SIZE  256
 
 #define URI_GET_LOGIN    "/api/get_login"
 #define URI_GET_INPUTS   "/api/get_inputs"
@@ -37,11 +39,13 @@ extern struct gpiod_line *RelayLines[RELAY_COUNT];
 extern struct gpiod_chip *InputChips[INPUT_COUNT];
 extern struct gpiod_line *InputLines[INPUT_COUNT];
 
-uint8_t InitGPIO();
+int8_t InitGPIO();
 void CleanupGPIO();
 uint8_t ControlRelay(uint8_t RelayNum, uint8_t State);
 uint8_t GetRelayState(uint8_t RelayNum);
 uint8_t GetInputState(uint8_t InputNum);
 uint8_t GetGpioChipAndLine(uint8_t Gpio, struct gpiod_chip **Chip, struct gpiod_line **Line, const char *Label);
-
+///////////////////////////////////
+int8_t RunWebServer(void);
+void StopWebServer(void);
 #endif // CONTROLLER_H

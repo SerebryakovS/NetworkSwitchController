@@ -73,6 +73,6 @@ response body for all above requests:
 
 
 sudo apt-get update
-sudo apt-get install -y gpiod libgpiod-dev
+sudo apt-get install -y gpiod libgpiod-dev libmicrohttpd-dev libcjson-dev
 
-gcc Main.c GlueHandlers.c -o out -lgpiod
+gcc Main.c GlueHandlers.c Server.c -o out -lgpiod -lmicrohttpd

@@ -32,7 +32,7 @@ uint8_t GetGpioChipAndLine(uint8_t Gpio, struct gpiod_chip **Chip, struct gpiod_
     };
     return EXIT_SUCCESS;
 };
-uint8_t InitGPIO() {
+int8_t InitGPIO() {
     uint8_t relayPins[] = {RELAY_1_PIN, RELAY_2_PIN, RELAY_3_PIN, RELAY_4_PIN};
     uint8_t inputPins[] = {INPUT_1_PIN, INPUT_2_PIN, INPUT_3_PIN, INPUT_4_PIN};
     for (uint8_t Idx = 0; Idx < RELAY_COUNT; Idx++) {
