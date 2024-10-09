@@ -2,11 +2,26 @@
 #include "Controller.h"
 #include <gpiod.h>
 #include <pthread.h>
+#include <curl/curl.h>
 
 struct gpiod_chip *RelayChips[RELAY_COUNT];
 struct gpiod_line *RelayLines[RELAY_COUNT];
 struct gpiod_chip *InputChips[INPUT_COUNT];
 struct gpiod_line *InputLines[INPUT_COUNT];
+
+typedef struct {
+    uint8_t    CurrentState;
+    uint32_t LastChangeTime;
+} InputCache;
+
+InputCache InputStates[INPUT_COUNT];
+
+uint32_t GetTimeMs() {
+    struct timeval Time;
+    gettimeofday(&Time, NULL);
+    return (Time.tv_sec * 1000) + (Time.tv_usec / 1000);
+};
+
 ////////////////////////////
 // GPIO RELATED FUNCTIONS //
 ////////////////////////////
@@ -17,17 +32,17 @@ uint8_t GetGpioChipAndLine(uint8_t Gpio, struct gpiod_chip **Chip, struct gpiod_
     snprintf(GpioChipName, sizeof(GpioChipName), "%s%d", GPIO_CHIP_BASE_PATH, GpioBank);
     *Chip = gpiod_chip_open(GpioChipName);
     if (!*Chip) {
-        fprintf(stderr, "Failed to open GPIO chip: %s\n", GpioChipName);
+        fprintf(stderr, "[ERR]: Failed to open GPIO chip: %s\n", GpioChipName);
         return -EXIT_FAILURE;
     };
     *Line = gpiod_chip_get_line(*Chip, BankPin);
     if (!*Line) {
-        fprintf(stderr, "Failed to get GPIO line %d on chip %s\n", BankPin, GpioChipName);
+        fprintf(stderr, "[ERR]: Failed to get GPIO line %d on chip %s\n", BankPin, GpioChipName);
         gpiod_chip_close(*Chip);
         return -EXIT_FAILURE;
     };
     if (Label && gpiod_line_request_output(*Line, Label, 0) < 0) {
-        fprintf(stderr, "Failed to request output for GPIO %d\n", Gpio);
+        fprintf(stderr, "[ERR]: Failed to request output for GPIO %d\n", Gpio);
         gpiod_chip_close(*Chip);
         return -EXIT_FAILURE;
     };
@@ -46,10 +61,12 @@ int8_t InitGPIO() {
             return -EXIT_FAILURE;
         };
         if (gpiod_line_request_input(InputLines[Idx], "input") < 0) {
-            fprintf(stderr, "Failed to request input for GPIO %d\n", inputPins[Idx]);
+            fprintf(stderr, "[ERR]: Failed to request input for GPIO %d\n", inputPins[Idx]);
             gpiod_chip_close(InputChips[Idx]);
             return -EXIT_FAILURE;
         };
+        InputStates[Idx].CurrentState = GetInputState(Idx + 1);
+        InputStates[Idx].LastChangeTime = time(NULL);
     };
     return EXIT_SUCCESS;
 };
@@ -76,7 +93,7 @@ uint8_t ControlRelay(uint8_t RelayNum, uint8_t State) {
         return -EXIT_FAILURE;
     };
     if (gpiod_line_set_value(Line, State) < 0) {
-        fprintf(stderr, "Failed to set relay GPIO\n");
+        fprintf(stderr, "[ERR]: Failed to set relay GPIO\n");
         return -EXIT_FAILURE;
     };
     return EXIT_SUCCESS;
@@ -101,6 +118,21 @@ uint8_t GetInputState(uint8_t InputNum) {
     };
     return gpiod_line_get_value(Line);
 };
+uint8_t GetDebouncedInputState(uint8_t InputNum) {
+    uint8_t NewState = GetInputState(InputNum);
+    uint32_t CurrentTime = GetTimeMs();
+    InputCache *Input = &InputStates[InputNum - 1];
+    if (NewState != Input->CurrentState) {
+        if (CurrentTime - Input->LastChangeTime >= Config.InputDelay[InputNum - 1]) {
+            Input->CurrentState = NewState;
+            Input->LastChangeTime = CurrentTime;
+            return NewState;
+        };
+    };
+    return Input->CurrentState;
+};
+
+
 ////////////////////////////
 // REST RELATED FUNCTIONS //
 ////////////////////////////
@@ -125,151 +157,137 @@ const char* GetRelays() {
     snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer), "]}\n");
     return WebResponseBuffer;
 };
-const char* ToggleRelay(int RelayNum) {
+//
+const char* SetRelay(uint8_t RelayNum) {
+    if (ControlRelay(RelayNum, 1) < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Set operation failed\"}\n");
+    } else {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"success\": true}\n");
+    };
+    return WebResponseBuffer;
+};
+const char* ResetRelay(uint8_t RelayNum) {
+    if (ControlRelay(RelayNum, 0) < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Reset operation failed\"}\n");
+    } else {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"success\": true}\n");
+    };
+    return WebResponseBuffer;
+};
+
+void* ToggleRelayThread(void* _RelayNum) {
+    uint8_t RelayNum = *((uint8_t *)_RelayNum);
+    free(_RelayNum);
+    if (ControlRelay(RelayNum, 1) < 0) {
+        fprintf(stderr, "[ERR]: Failed to set relay %d to HIGH\n", RelayNum);
+        return NULL;
+    };
+    usleep((uint32_t)Config.RelayDelay[RelayNum-1]*1000);
+    if (ControlRelay(RelayNum, 0) < 0) {
+        fprintf(stderr, "[ERR]: Failed to set relay %d to LOW\n", RelayNum);
+    };
+    return NULL;
+};
+const char* ToggleRelay(uint8_t RelayNum) {
     if (RelayNum < 1 || RelayNum > RELAY_COUNT) {
         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid relay number\"}\n");
         return WebResponseBuffer;
     };
-    int NewState = !CurrentState;
-    if (ControlRelay(RelayNum, NewState) < 0) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to toggle relay\"}\n");
+    int* RelayNumPtr = (int*)malloc(sizeof(int));
+    if (!RelayNumPtr) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Memory allocation failed\"}\n");
         return WebResponseBuffer;
     };
-    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"new_state\": %s}\n", RelayNum, NewState ? "true" : "false");
+    *RelayNumPtr = RelayNum;
+    pthread_t ToggleThread;
+    if (pthread_create(&ToggleThread, NULL, ToggleRelayThread, (void*)RelayNumPtr) != 0) {
+        free(RelayNumPtr);
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to create thread\"}\n");
+        return WebResponseBuffer;
+    };
+    pthread_detach(ToggleThread);
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"success\": true}\n");
     return WebResponseBuffer;
 };
 //
-typedef struct {
-    uint8_t RelayNum;
-    float   DelaySec;
-} RelayToggleArgs;
-
-void* ToggleRelayThread(void* Args) {
-    RelayToggleArgs* toggleArgs = (RelayToggleArgs*)args;
-
-
-    if (ControlRelay(toggleArgs->RelayNum, 1) < 0) {
-        fprintf(stderr, "Failed to set relay %d to HIGH\n", toggleArgs->RelayNum);
-        free(toggleArgs);
-        return NULL;
-    }
-
-    // Sleep for the specified delay
-    sleep(toggleArgs->DelaySec);
-
-    // Set relay to LOW
-    if (ControlRelay(toggleArgs->RelayNum, 0) < 0) {
-        fprintf(stderr, "Failed to set relay %d to LOW\n", toggleArgs->RelayNum);
-    }
-
-    free(toggleArgs); // Free the allocated memory
-    return NULL;
-}
-
-// ToggleRelay function that starts the thread and returns immediately
-const char* ToggleRelay(int RelayNum, double DelaySec) {
+const char* SetRelayDelay(uint8_t RelayNum, float DelaySec) {
     if (RelayNum < 1 || RelayNum > RELAY_COUNT) {
         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid relay number\"}\n");
         return WebResponseBuffer;
-    }
-
-    // Create a new argument structure for the thread
-    RelayToggleArgs* args = (RelayToggleArgs*)malloc(sizeof(RelayToggleArgs));
-    args->RelayNum = RelayNum;
-    args->DelaySec = DelaySec;
-
-    // Create the thread to handle the relay toggle
-    pthread_t toggleThread;
-    if (pthread_create(&toggleThread, NULL, ToggleRelayThread, (void*)args) != 0) {
-        free(args);
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to create thread\"}\n");
+    };
+    if (DelaySec < (float)DEFAULT_RELAY_DELAY/1000.0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid delay value\"}\n");
         return WebResponseBuffer;
-    }
-
-    // Detach the thread to allow it to run independently
-    pthread_detach(toggleThread);
-
-    // Return success immediately
+    };
+    Config.RelayDelay[RelayNum - 1] = (uint16_t)(DelaySec * 1000);
+    if (SaveConfig() != EXIT_SUCCESS) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to save configuration\"}\n");
+        return WebResponseBuffer;
+    };
     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"success\": true}\n");
     return WebResponseBuffer;
-}
+};
 
-
-
-/*
-
-// Переключение реле
-const char* ToggleRelay(int RelayNum) {
-    if (RelayNum < 1 || RelayNum > 4) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid relay number\"}\n");
+const char* SetInputDelay(uint8_t InputNum, float DelaySec) {
+    if (InputNum < 1 || InputNum > INPUT_COUNT) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid input number\"}\n");
         return WebResponseBuffer;
-    }
-
-    int current_state = gpiod_line_get_value(RelayLines[RelayNum - 1]);
-    if (current_state < 0) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to read relay state\"}\n");
+    };
+    if (DelaySec < (float)DEFAULT_INPUT_DELAY/1000.0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid delay value\"}\n");
         return WebResponseBuffer;
-    }
-
-    int new_state = !current_state;
-    if (ControlRelay(RelayNum, new_state) < 0) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to toggle relay\"}\n");
+    };
+    Config.InputDelay[InputNum - 1] = (uint16_t)(DelaySec * 1000);
+    if (SaveConfig() != EXIT_SUCCESS) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to save configuration\"}\n");
         return WebResponseBuffer;
-    }
-
-    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"new_state\": %d}\n", RelayNum, new_state);
+    };
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"success\": true}\n");
     return WebResponseBuffer;
-}
-
-// Установка задержки на реле
-const char* SetRelayDelay(int RelayNum, double DelaySec) {
-    if (ControlRelay(RelayNum, 1) < 0) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to set relay state\"}\n");
+};
+//
+const char* SetWebhook(const char *WebhookUrl) {
+    if (WebhookUrl == NULL || strlen(WebhookUrl) >= sizeof(Config.WebhookUrl)) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid webhook URL\"}\n");
         return WebResponseBuffer;
-    }
-
-    sleep(DelaySec);
-
-    if (ControlRelay(RelayNum, 0) < 0) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to reset relay state\"}\n");
+    };
+    strcpy(Config.WebhookUrl, WebhookUrl);
+    if (SaveConfig() != EXIT_SUCCESS) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to save configuration\"}\n");
         return WebResponseBuffer;
-    }
-
-    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"delay_sec\": %.2f, \"new_state\": 0}\n", RelayNum, DelaySec);
+    };
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"success\": true}\n");
     return WebResponseBuffer;
-}
+};
+void MonitorInputsAndTriggerWebhook() {
+    uint8_t StateChanged = 0;
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"inputs\": [");
+    for (uint8_t Idx = 0; Idx < INPUT_COUNT; Idx++) {
+        uint8_t PinState = GetDebouncedInputState(Idx + 1);
+        if (PinState != InputStates[Idx].CurrentState) {
+            StateChanged = 1;
+            InputStates[Idx].CurrentState = PinState;
+            snprintf(WebResponseBuffer + strlen(WebResponseBuffer),
+                     WEB_RESPONSE_SIZE - strlen(WebResponseBuffer),
+                     "{\"input_num\": %d, \"state\": %s}%s", Idx + 1, PinState ? "true" : "false", Idx < INPUT_COUNT - 1 ? ", " : "");
+        };
+    };
+    if (StateChanged && strlen(Config.WebhookUrl) > 0) {
+        if (strlen(Config.WebhookUrl) > 0) {
+            CURL *CurlObject = curl_easy_init();
+            if (CurlObject) {
+                curl_easy_setopt(CurlObject, CURLOPT_URL, Config.WebhookUrl);
+                curl_easy_setopt(CurlObject, CURLOPT_POST, 1L);
+                curl_easy_setopt(CurlObject, CURLOPT_POSTFIELDS, WebResponseBuffer);
+                curl_easy_setopt(CurlObject, CURLOPT_POSTFIELDSIZE, (long)strlen(WebResponseBuffer));
+                CURLcode res = curl_easy_perform(CurlObject);
+                if (res != CURLE_OK) {
+                    fprintf(stderr, "[ERR]: Failed to send webhook: %s\n", curl_easy_strerror(res));
+                };
+                curl_easy_cleanup(CurlObject);
+            };
+        };
+    };
+};
 
-// Установка задержки на вход
-const char* SetInputDelay(int InputNum, double DelaySec) {
-    sleep(DelaySec);
-    int input_state = GetInputState(InputNum);
-    if (input_state < 0) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to read input state after delay\"}\n");
-        return WebResponseBuffer;
-    }
 
-    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"input_num\": %d, \"delay_sec\": %.2f, \"state\": %d}\n", InputNum, DelaySec, input_state);
-    return WebResponseBuffer;
-}
-
-// Установка состояния реле
-const char* SetRelay(int RelayNum) {
-    if (ControlRelay(RelayNum, 1) < 0) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to set relay state\"}\n");
-        return WebResponseBuffer;
-    }
-
-    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"state\": 1}\n", RelayNum);
-    return WebResponseBuffer;
-}
-
-// Сброс состояния реле
-const char* ResetRelay(int RelayNum) {
-    if (ControlRelay(RelayNum, 0) < 0) {
-        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to reset relay state\"}\n");
-        return WebResponseBuffer;
-    }
-
-    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"state\": 0}\n", RelayNum);
-    return WebResponseBuffer;
-}*/

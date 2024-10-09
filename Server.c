@@ -1,7 +1,6 @@
 
 #include "Controller.h"
 #include <microhttpd.h>
-#include <cjson/cJSON.h>
 
 struct MHD_Daemon *Daemon;
 
@@ -23,8 +22,8 @@ int ValidateCredentials(struct MHD_Connection *Connection) {
         return -EXIT_FAILURE; // or MHD_HTTP_UNAUTHORIZED
     };
 
-    if (strcmp(Username, getenv("AUTH_USER")) == 0 &&
-        strcmp(Password, getenv("AUTH_PASS")) == 0) {
+    if (strcmp(Username, Config.Username) == 0 &&
+        strcmp(Password, Config.Password) == 0) {
         free(Username);
         free(Password);
         return EXIT_SUCCESS;
@@ -70,7 +69,7 @@ static int HandlePostRequest(struct MHD_Connection *Connection, const char* Url,
             cJSON_Delete(JsonObject);
             return MHD_HTTP_BAD_REQUEST;
         };
-        // ResponseStr = ToggleRelay(RelayNum->valueint);
+        ResponseStr = ToggleRelay(RelayNum->valueint);
     } else if (strcmp(Url, URI_RELAY_DELAY) == 0) {
         const cJSON *RelayNum = cJSON_GetObjectItem(JsonObject, "io_number");
         const cJSON *DelaySec = cJSON_GetObjectItem(JsonObject, "delay_sec");
@@ -78,7 +77,7 @@ static int HandlePostRequest(struct MHD_Connection *Connection, const char* Url,
             cJSON_Delete(JsonObject);
             return MHD_HTTP_BAD_REQUEST;
         };
-        // ResponseStr = SetRelayDelay(RelayNum->valueint, DelaySec->valuedouble);
+        ResponseStr = SetRelayDelay(RelayNum->valueint, DelaySec->valuedouble);
     } else if (strcmp(Url, URI_INPUT_DELAY) == 0) {
         const cJSON *InputNum = cJSON_GetObjectItem(JsonObject, "io_number");
         const cJSON *DelaySec = cJSON_GetObjectItem(JsonObject, "delay_sec");
@@ -86,28 +85,28 @@ static int HandlePostRequest(struct MHD_Connection *Connection, const char* Url,
             cJSON_Delete(JsonObject);
             return MHD_HTTP_BAD_REQUEST;
         };
-        // ResponseStr = SetInputDelay(InputNum->valueint, DelaySec->valuedouble);
+        ResponseStr = SetInputDelay(InputNum->valueint, DelaySec->valuedouble);
     } else if (strcmp(Url, URI_SET_RELAY) == 0) {
         const cJSON *RelayNum = cJSON_GetObjectItem(JsonObject, "relay_num");
         if (!cJSON_IsNumber(RelayNum)) {
             cJSON_Delete(JsonObject);
             return MHD_HTTP_BAD_REQUEST;
         };
-        // ResponseStr = SetRelay(RelayNum->valueint);
+        ResponseStr = SetRelay(RelayNum->valueint);
     } else if (strcmp(Url, URI_RESET_RELAY) == 0) {
         const cJSON *RelayNum = cJSON_GetObjectItem(JsonObject, "relay_num");
         if (!cJSON_IsNumber(RelayNum)) {
             cJSON_Delete(JsonObject);
             return MHD_HTTP_BAD_REQUEST;
         };
-        // ResponseStr = ResetRelay(RelayNum->valueint);
+        ResponseStr = ResetRelay(RelayNum->valueint);
     } else if (strcmp(Url, URI_SET_WEBHOOK) == 0) {
         const cJSON *WebhookEndpoint = cJSON_GetObjectItem(JsonObject, "endpoint");
         if (!cJSON_IsString(WebhookEndpoint)) {
             cJSON_Delete(JsonObject);
             return MHD_HTTP_BAD_REQUEST;
         };
-        // ResponseStr = SetWebhook(WebhookEndpoint->valuestring);
+        ResponseStr = SetWebhook(WebhookEndpoint->valuestring);
     } else {
         ResponseStr = "{\"error\":\"unknown endpoint received\"}\n";
     };
@@ -144,7 +143,7 @@ static enum MHD_Result AnswerToWebRequest(void *Cls, struct MHD_Connection *Conn
         struct MHD_Response *Response = MHD_create_response_from_buffer(strlen(UnauthorizedResponse),
                                                                         (void*)UnauthorizedResponse, MHD_RESPMEM_MUST_COPY);
         return MHD_queue_basic_auth_fail_response(Connection, "", Response);
-    }
+    };
     if (strcmp(Method, "POST") == 0) {
         if (*ConCls == NULL) {
             struct PostRequest *_PostRequest = malloc(sizeof(struct PostRequest));
@@ -155,7 +154,7 @@ static enum MHD_Result AnswerToWebRequest(void *Cls, struct MHD_Connection *Conn
             _PostRequest->Size = 0;
             *ConCls = _PostRequest;
             return MHD_YES;
-        }
+        };
         struct PostRequest *_PostRequest = *ConCls;
         if (*UploadDataSize != 0) {
             _PostRequest->Data = realloc(_PostRequest->Data, _PostRequest->Size + *UploadDataSize + 1);
@@ -176,7 +175,7 @@ static enum MHD_Result AnswerToWebRequest(void *Cls, struct MHD_Connection *Conn
 };
 //
 int8_t RunWebServer(void){
-        Daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD, REST_PORT,
+        Daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD, Config.RestPort,
                                   NULL, NULL, &AnswerToWebRequest, NULL,
                                   MHD_OPTION_NOTIFY_COMPLETED, RequestCompleted, NULL,
                                   MHD_OPTION_END);
@@ -184,7 +183,7 @@ int8_t RunWebServer(void){
             printf("[ERR]: Could not start web-server...\n");
             return -EXIT_FAILURE;
         };
-        printf("[OK]: Web-server is running on port: %d\n", REST_PORT);
+        printf("[OK]: Web-server is running on port: %d\n", Config.RestPort);
         return EXIT_SUCCESS;
 };
 //

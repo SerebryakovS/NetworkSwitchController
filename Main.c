@@ -3,19 +3,21 @@
 #include <signal.h>
 
 void HandleSigint(int Signal) {
-    ControlRelay(1, 0);
-    ControlRelay(1, 0);
-    ControlRelay(1, 0);
-    ControlRelay(1, 0);
+    for (uint8_t Idx = 1; Idx <= RELAY_COUNT; Idx++) {
+        ControlRelay(Idx, 0);
+    };
     StopWebServer();
     CleanupGPIO();
     exit(EXIT_SUCCESS);
 };
 
-
 int main(int Argc, char *Argv[]){
     InitGPIO();
     signal(SIGINT, HandleSigint);
+    if (LoadConfig() != EXIT_SUCCESS) {
+        fprintf(stderr, "Failed to load configuration\n");
+        return -EXIT_FAILURE;
+    };
     if (Argc > 1 && strcmp(Argv[1], "--test_io") == 0) {
         int State = 0;
         for (;;){
@@ -41,8 +43,8 @@ int main(int Argc, char *Argv[]){
     } else {
         RunWebServer();
         while (1) {
-            sleep(1);
+            MonitorInputsAndTriggerWebhook();
+            usleep(100000);
         };
-
     };
 };
