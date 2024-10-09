@@ -3,45 +3,47 @@
 #include <microhttpd.h>
 #include <cjson/cJSON.h>
 
-char WebResponseBuffer[WEB_RESPONSE_SIZE];
 struct MHD_Daemon *Daemon;
+
+char WebResponseBuffer[WEB_RESPONSE_SIZE] = {};
 
 struct PostRequest {
     char* Data; size_t Size;
 };
-
-const char* GetLogin(void){
-
+//
+const char* GetLogin() {
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"auth\": true}\n");
+    return WebResponseBuffer;
 };
+//
+int ValidateCredentials(struct MHD_Connection *Connection) {
+    char *Password = NULL;
+    char *Username = MHD_basic_auth_get_username_password(Connection, &Password);
+    if (Username == NULL) {
+        return -EXIT_FAILURE; // or MHD_HTTP_UNAUTHORIZED
+    };
 
-const char* SetWebhook(char *WebhookEndpoint){
-
+    if (strcmp(Username, getenv("AUTH_USER")) == 0 &&
+        strcmp(Password, getenv("AUTH_PASS")) == 0) {
+        free(Username);
+        free(Password);
+        return EXIT_SUCCESS;
+    };
+    free(Username);
+    free(Password);
+    return -EXIT_FAILURE;
 };
-
-// //
-// const char* GetFreeSpotsCount() {
-//     int FreeSpotsCount = GetCacheFreeSpotsCount();
-//     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\n    \"free_spots_count\" : %d\n}\n", FreeSpotsCount);
-//     return WebResponseBuffer;
-// };
-// //
-// const char* SetDeviceThreshold(const char* DeviceUid, const char* Threshold) {
-//     char Rs485Cmd[256];
-//     snprintf(Rs485Cmd, sizeof(Rs485Cmd), "{\"uid\":\"%s\",\"type\":\"set_threshold\",\"threshold\":%s}\n", DeviceUid, Threshold);
-//     Rs485MakeIO(Rs485Cmd, WebResponseBuffer, sizeof(WebResponseBuffer));
-//     return WebResponseBuffer;
-// };
 //
 static int HandleGetRequest(struct MHD_Connection *Connection, const char* Url) {
     const char* ResponseStr = NULL;
     if (strcmp(Url, URI_GET_LOGIN) == 0) {
-        // ResponseStr = GetLogin();
+        ResponseStr = GetLogin();
     } else
     if (strcmp(Url, URI_GET_INPUTS) == 0) {
-        // ResponseStr = GetInputs();
+        ResponseStr = GetInputs();
     } else
     if (strcmp(Url, URI_GET_RELAYS) == 0) {
-        // ResponseStr = GetRelays();
+        ResponseStr = GetRelays();
     } else {
         ResponseStr = "{\"error\":\"unknown endpoint received\"}\n";
     };
@@ -105,7 +107,7 @@ static int HandlePostRequest(struct MHD_Connection *Connection, const char* Url,
             cJSON_Delete(JsonObject);
             return MHD_HTTP_BAD_REQUEST;
         };
-        ResponseStr = SetWebhook(WebhookEndpoint->valuestring);
+        // ResponseStr = SetWebhook(WebhookEndpoint->valuestring);
     } else {
         ResponseStr = "{\"error\":\"unknown endpoint received\"}\n";
     };
@@ -137,6 +139,12 @@ static enum MHD_Result AnswerToWebRequest(void *Cls, struct MHD_Connection *Conn
                                           const char *Url, const char *Method,
                                           const char *Version, const char *UploadData,
                                           uint64_t *UploadDataSize, void **ConCls) {
+    if (ValidateCredentials(Connection) != EXIT_SUCCESS) {
+        char UnauthorizedResponse[] = "{\"auth\": false}\n";
+        struct MHD_Response *Response = MHD_create_response_from_buffer(strlen(UnauthorizedResponse),
+                                                                        (void*)UnauthorizedResponse, MHD_RESPMEM_MUST_COPY);
+        return MHD_queue_basic_auth_fail_response(Connection, "", Response);
+    }
     if (strcmp(Method, "POST") == 0) {
         if (*ConCls == NULL) {
             struct PostRequest *_PostRequest = malloc(sizeof(struct PostRequest));
@@ -176,9 +184,11 @@ int8_t RunWebServer(void){
             printf("[ERR]: Could not start web-server...\n");
             return -EXIT_FAILURE;
         };
-        printf("[OK]: Server is running on port: %d\n", REST_PORT);
+        printf("[OK]: Web-server is running on port: %d\n", REST_PORT);
+        return EXIT_SUCCESS;
 };
 //
 void StopWebServer(void){
     MHD_stop_daemon(Daemon);
+    printf("[OK]: Web-server stopped\n");
 };

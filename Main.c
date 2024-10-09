@@ -1,8 +1,21 @@
 
 #include "Controller.h"
+#include <signal.h>
+
+void HandleSigint(int Signal) {
+    ControlRelay(1, 0);
+    ControlRelay(1, 0);
+    ControlRelay(1, 0);
+    ControlRelay(1, 0);
+    StopWebServer();
+    CleanupGPIO();
+    exit(EXIT_SUCCESS);
+};
+
 
 int main(int Argc, char *Argv[]){
     InitGPIO();
+    signal(SIGINT, HandleSigint);
     if (Argc > 1 && strcmp(Argv[1], "--test_io") == 0) {
         int State = 0;
         for (;;){
@@ -27,8 +40,9 @@ int main(int Argc, char *Argv[]){
         };
     } else {
         RunWebServer();
+        while (1) {
+            sleep(1);
+        };
 
     };
-    StopWebServer(void);
-    CleanupGPIO();
 };

@@ -11,8 +11,10 @@
 #define REST_PORT         8112
 #define WEB_RESPONSE_SIZE  256
 
-#define URI_GET_LOGIN    "/api/get_login"
-#define URI_GET_INPUTS   "/api/get_inputs"
+extern char WebResponseBuffer[WEB_RESPONSE_SIZE];
+
+#define URI_GET_LOGIN    "/api/get_login"       // DONE
+#define URI_GET_INPUTS   "/api/get_inputs"      // DONE
 #define URI_GET_RELAYS   "/api/get_relays"
 #define URI_TOGGLE_RELAY "/api/toggle_relay"
 #define URI_RELAY_DELAY  "/api/relay_delay"
@@ -48,4 +50,9 @@ uint8_t GetGpioChipAndLine(uint8_t Gpio, struct gpiod_chip **Chip, struct gpiod_
 ///////////////////////////////////
 int8_t RunWebServer(void);
 void StopWebServer(void);
+
+const char* GetInputs(void);
+const char* GetRelays(void);
+const char* ToggleRelay(uint8_t RelayNum);
+
 #endif // CONTROLLER_H

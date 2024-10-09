@@ -1,6 +1,7 @@
 
 #include "Controller.h"
 #include <gpiod.h>
+#include <pthread.h>
 
 struct gpiod_chip *RelayChips[RELAY_COUNT];
 struct gpiod_line *RelayLines[RELAY_COUNT];
@@ -104,113 +105,171 @@ uint8_t GetInputState(uint8_t InputNum) {
 // REST RELATED FUNCTIONS //
 ////////////////////////////
 
+const char* GetInputs() {
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"inputs\": [");
+    for (uint8_t Idx = 0; Idx < INPUT_COUNT; Idx++) {
+        uint8_t PinState = GetInputState(Idx + 1);
+        snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer),
+                 "{\"input_num\": %d, \"state\": %s}%s", Idx + 1, PinState ? "false" : "true", Idx < INPUT_COUNT - 1 ? ", " : "");
+    };
+    snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer), "]}\n");
+    return WebResponseBuffer;
+};
+const char* GetRelays() {
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relays\": [");
+    for (uint8_t Idx = 0; Idx < RELAY_COUNT; Idx++) {
+        uint8_t RelayState = GetRelayState(Idx + 1);
+        snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer),
+                 "{\"relay_num\": %d, \"state\": %s}%s", Idx + 1, RelayState ? "true" : "false", Idx < RELAY_COUNT - 1 ? ", " : "");
+    };
+    snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer), "]}\n");
+    return WebResponseBuffer;
+};
+const char* ToggleRelay(int RelayNum) {
+    if (RelayNum < 1 || RelayNum > RELAY_COUNT) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid relay number\"}\n");
+        return WebResponseBuffer;
+    };
+    int NewState = !CurrentState;
+    if (ControlRelay(RelayNum, NewState) < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to toggle relay\"}\n");
+        return WebResponseBuffer;
+    };
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"new_state\": %s}\n", RelayNum, NewState ? "true" : "false");
+    return WebResponseBuffer;
+};
+//
+typedef struct {
+    uint8_t RelayNum;
+    float   DelaySec;
+} RelayToggleArgs;
+
+void* ToggleRelayThread(void* Args) {
+    RelayToggleArgs* toggleArgs = (RelayToggleArgs*)args;
 
 
-// const char* GetInputs(void) {
-//     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "[");
-//     for (int i = 0; i < 4; i++) {
-//         int input_state = GetInputState(i + 1);
-//         if (input_state < 0) {
-//             snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to read input state for input %d\"}\n", i + 1);
-//             return WebResponseBuffer;
-//         }
-//
-//         snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer),
-//                  "{\"input_num\": %d, \"state\": %d}%s", i + 1, input_state, i < 3 ? ", " : "");
-//     }
-//     snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer), "]");
-//     return WebResponseBuffer;
-// }
-//
-// // Получение состояния реле
-// const char* GetRelays(void) {
-//     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "[");
-//     for (int i = 0; i < 4; i++) {
-//         int relay_state = gpiod_line_get_value(RelayLines[i]);
-//         if (relay_state < 0) {
-//             snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to read relay state for relay %d\"}\n", i + 1);
-//             return WebResponseBuffer;
-//         }
-//
-//         snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer),
-//                  "{\"relay_num\": %d, \"state\": %d}%s", i + 1, relay_state, i < 3 ? ", " : "");
-//     }
-//     snprintf(WebResponseBuffer + strlen(WebResponseBuffer), WEB_RESPONSE_SIZE - strlen(WebResponseBuffer), "]");
-//     return WebResponseBuffer;
-// }
-//
-// // Переключение реле
-// const char* ToggleRelay(int RelayNum) {
-//     if (RelayNum < 1 || RelayNum > 4) {
-//         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid relay number\"}\n");
-//         return WebResponseBuffer;
-//     }
-//
-//     int current_state = gpiod_line_get_value(RelayLines[RelayNum - 1]);
-//     if (current_state < 0) {
-//         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to read relay state\"}\n");
-//         return WebResponseBuffer;
-//     }
-//
-//     int new_state = !current_state;
-//     if (ControlRelay(RelayNum, new_state) < 0) {
-//         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to toggle relay\"}\n");
-//         return WebResponseBuffer;
-//     }
-//
-//     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"new_state\": %d}\n", RelayNum, new_state);
-//     return WebResponseBuffer;
-// }
-//
-// // Установка задержки на реле
-// const char* SetRelayDelay(int RelayNum, double DelaySec) {
-//     if (ControlRelay(RelayNum, 1) < 0) {
-//         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to set relay state\"}\n");
-//         return WebResponseBuffer;
-//     }
-//
-//     sleep(DelaySec);
-//
-//     if (ControlRelay(RelayNum, 0) < 0) {
-//         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to reset relay state\"}\n");
-//         return WebResponseBuffer;
-//     }
-//
-//     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"delay_sec\": %.2f, \"new_state\": 0}\n", RelayNum, DelaySec);
-//     return WebResponseBuffer;
-// }
-//
-// // Установка задержки на вход
-// const char* SetInputDelay(int InputNum, double DelaySec) {
-//     sleep(DelaySec);
-//     int input_state = GetInputState(InputNum);
-//     if (input_state < 0) {
-//         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to read input state after delay\"}\n");
-//         return WebResponseBuffer;
-//     }
-//
-//     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"input_num\": %d, \"delay_sec\": %.2f, \"state\": %d}\n", InputNum, DelaySec, input_state);
-//     return WebResponseBuffer;
-// }
-//
-// // Установка состояния реле
-// const char* SetRelay(int RelayNum) {
-//     if (ControlRelay(RelayNum, 1) < 0) {
-//         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to set relay state\"}\n");
-//         return WebResponseBuffer;
-//     }
-//
-//     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"state\": 1}\n", RelayNum);
-//     return WebResponseBuffer;
-// }
-//
-// // Сброс состояния реле
-// const char* ResetRelay(int RelayNum) {
-//     if (ControlRelay(RelayNum, 0) < 0) {
-//         snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to reset relay state\"}\n");
-//         return WebResponseBuffer;
-//     }
-//
-//     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"state\": 0}\n", RelayNum);
-//     return WebResponseBuffer;
-// }
+    if (ControlRelay(toggleArgs->RelayNum, 1) < 0) {
+        fprintf(stderr, "Failed to set relay %d to HIGH\n", toggleArgs->RelayNum);
+        free(toggleArgs);
+        return NULL;
+    }
+
+    // Sleep for the specified delay
+    sleep(toggleArgs->DelaySec);
+
+    // Set relay to LOW
+    if (ControlRelay(toggleArgs->RelayNum, 0) < 0) {
+        fprintf(stderr, "Failed to set relay %d to LOW\n", toggleArgs->RelayNum);
+    }
+
+    free(toggleArgs); // Free the allocated memory
+    return NULL;
+}
+
+// ToggleRelay function that starts the thread and returns immediately
+const char* ToggleRelay(int RelayNum, double DelaySec) {
+    if (RelayNum < 1 || RelayNum > RELAY_COUNT) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid relay number\"}\n");
+        return WebResponseBuffer;
+    }
+
+    // Create a new argument structure for the thread
+    RelayToggleArgs* args = (RelayToggleArgs*)malloc(sizeof(RelayToggleArgs));
+    args->RelayNum = RelayNum;
+    args->DelaySec = DelaySec;
+
+    // Create the thread to handle the relay toggle
+    pthread_t toggleThread;
+    if (pthread_create(&toggleThread, NULL, ToggleRelayThread, (void*)args) != 0) {
+        free(args);
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to create thread\"}\n");
+        return WebResponseBuffer;
+    }
+
+    // Detach the thread to allow it to run independently
+    pthread_detach(toggleThread);
+
+    // Return success immediately
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"success\": true}\n");
+    return WebResponseBuffer;
+}
+
+
+
+/*
+
+// Переключение реле
+const char* ToggleRelay(int RelayNum) {
+    if (RelayNum < 1 || RelayNum > 4) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid relay number\"}\n");
+        return WebResponseBuffer;
+    }
+
+    int current_state = gpiod_line_get_value(RelayLines[RelayNum - 1]);
+    if (current_state < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to read relay state\"}\n");
+        return WebResponseBuffer;
+    }
+
+    int new_state = !current_state;
+    if (ControlRelay(RelayNum, new_state) < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to toggle relay\"}\n");
+        return WebResponseBuffer;
+    }
+
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"new_state\": %d}\n", RelayNum, new_state);
+    return WebResponseBuffer;
+}
+
+// Установка задержки на реле
+const char* SetRelayDelay(int RelayNum, double DelaySec) {
+    if (ControlRelay(RelayNum, 1) < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to set relay state\"}\n");
+        return WebResponseBuffer;
+    }
+
+    sleep(DelaySec);
+
+    if (ControlRelay(RelayNum, 0) < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to reset relay state\"}\n");
+        return WebResponseBuffer;
+    }
+
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"delay_sec\": %.2f, \"new_state\": 0}\n", RelayNum, DelaySec);
+    return WebResponseBuffer;
+}
+
+// Установка задержки на вход
+const char* SetInputDelay(int InputNum, double DelaySec) {
+    sleep(DelaySec);
+    int input_state = GetInputState(InputNum);
+    if (input_state < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to read input state after delay\"}\n");
+        return WebResponseBuffer;
+    }
+
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"input_num\": %d, \"delay_sec\": %.2f, \"state\": %d}\n", InputNum, DelaySec, input_state);
+    return WebResponseBuffer;
+}
+
+// Установка состояния реле
+const char* SetRelay(int RelayNum) {
+    if (ControlRelay(RelayNum, 1) < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to set relay state\"}\n");
+        return WebResponseBuffer;
+    }
+
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"state\": 1}\n", RelayNum);
+    return WebResponseBuffer;
+}
+
+// Сброс состояния реле
+const char* ResetRelay(int RelayNum) {
+    if (ControlRelay(RelayNum, 0) < 0) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to reset relay state\"}\n");
+        return WebResponseBuffer;
+    }
+
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"relay_num\": %d, \"state\": 0}\n", RelayNum);
+    return WebResponseBuffer;
+}*/
