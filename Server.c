@@ -187,14 +187,14 @@ int8_t RunWebServer(void){
                                   MHD_OPTION_NOTIFY_COMPLETED, RequestCompleted, NULL,
                                   MHD_OPTION_END);
         if (NULL == Daemon){
-            printf("[ERR]: Could not start web-server...\n");
+            fprintf(stdout, "[ERR]: Could not start web-server...\n");
             return -EXIT_FAILURE;
         };
-        printf("[OK]: Web-server is running on port: %d\n", Config.RestPort);
+        fprintf(stdout, "[OK]: Web-server is running on port: %d\n", Config.RestPort);
         return EXIT_SUCCESS;
 };
 //
 void StopWebServer(void){
     MHD_stop_daemon(Daemon);
-    printf("[OK]: Web-server stopped\n");
+    fprintf(stdout, "[OK]: Web-server stopped\n");
 };

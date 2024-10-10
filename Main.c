@@ -14,10 +14,6 @@ void HandleSigint(int Signal) {
 int main(int Argc, char *Argv[]){
     InitGPIO();
     signal(SIGINT, HandleSigint);
-    if (LoadConfig() != EXIT_SUCCESS) {
-        fprintf(stderr, "Failed to load configuration\n");
-        return -EXIT_FAILURE;
-    };
     if (Argc > 1 && strcmp(Argv[1], "--test_io") == 0) {
         int State = 0;
         for (;;){
@@ -41,10 +37,15 @@ int main(int Argc, char *Argv[]){
             sleep(1);
         };
     } else {
+        if (LoadConfig() != EXIT_SUCCESS) {
+            fprintf(stdout, "[ERR] : Failed to load configuration\n");
+            fflush(stdout);
+            return -EXIT_FAILURE;
+        };
         RunWebServer();
         while (1) {
             MonitorInputsAndTriggerWebhook();
-            usleep(100000);
+            sleep(0.1);
         };
     };
 };

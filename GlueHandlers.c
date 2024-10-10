@@ -124,14 +124,13 @@ uint8_t GetDebouncedInputState(uint8_t InputNum) {
     InputCache *Input = &InputStates[InputNum - 1];
     if (NewState != Input->CurrentState) {
         if (CurrentTime - Input->LastChangeTime >= Config.InputDelay[InputNum - 1]) {
-            Input->CurrentState = NewState;
             Input->LastChangeTime = CurrentTime;
-            return NewState;
+            Input->CurrentState = NewState;
+            return true;
         };
     };
-    return Input->CurrentState;
+    return false;
 };
-
 
 ////////////////////////////
 // REST RELATED FUNCTIONS //
@@ -263,17 +262,22 @@ void MonitorInputsAndTriggerWebhook() {
     uint8_t StateChanged = 0;
     snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"inputs\": [");
     for (uint8_t Idx = 0; Idx < INPUT_COUNT; Idx++) {
-        uint8_t PinState = GetDebouncedInputState(Idx + 1);
-        if (PinState != InputStates[Idx].CurrentState) {
+
+
+        if (GetDebouncedInputState(Idx + 1)) {
+        // uint8_t PinState = GetDebouncedInputState(Idx + 1);
+        // if (PinState != InputStates[Idx].CurrentState) {
             StateChanged = 1;
-            InputStates[Idx].CurrentState = PinState;
+            // InputStates[Idx].CurrentState = PinState;
             snprintf(WebResponseBuffer + strlen(WebResponseBuffer),
-                     WEB_RESPONSE_SIZE - strlen(WebResponseBuffer),
-                     "{\"input_num\": %d, \"state\": %s}%s", Idx + 1, PinState ? "true" : "false", Idx < INPUT_COUNT - 1 ? ", " : "");
+                     WEB_RESPONSE_SIZE - strlen(WebResponseBuffer), "{\"input_num\": %d, \"state\": %s}%s",
+                     Idx + 1, InputStates[Idx].CurrentState ? "true" : "false", Idx < INPUT_COUNT - 1 ? ", " : "");
         };
     };
     if (StateChanged && strlen(Config.WebhookUrl) > 0) {
         if (strlen(Config.WebhookUrl) > 0) {
+            fprintf(stdout,"[OK]: Input value has been changed. Sending webhook to: %s\n",Config.WebhookUrl);
+            fflush(stdout);
             CURL *CurlObject = curl_easy_init();
             if (CurlObject) {
                 curl_easy_setopt(CurlObject, CURLOPT_URL, Config.WebhookUrl);

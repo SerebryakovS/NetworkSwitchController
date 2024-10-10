@@ -9,7 +9,7 @@
 #include <string.h>
 #include <cjson/cJSON.h>
 
-#define WEB_RESPONSE_SIZE   256
+#define WEB_RESPONSE_SIZE  1024
 #define DEFAULT_REST_PORT  8112
 
 #define DEFAULT_USERNAME   "admin"
@@ -68,6 +68,7 @@ const char* ToggleRelay(uint8_t RelayNum);
 const char* SetRelayDelay(uint8_t RelayNum, float DelaySec);
 const char* SetInputDelay(uint8_t InputNum, float DelaySec);
 const char* SetWebhook(const char *WebhookUrl);
+const char* SetPassword(const char* NewPassword);
 
 void MonitorInputsAndTriggerWebhook();
 ///////////////////////////////////

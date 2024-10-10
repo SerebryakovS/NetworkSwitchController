@@ -8,7 +8,8 @@ int8_t LoadConfig(void) {
     const char *ConfigFilename = getenv("CONFIG_PATH");
     FILE *ConfigFile = fopen(ConfigFilename, "r");
     if (!ConfigFile) {
-        fprintf(stderr, "[..]: Config file not found. Generating new one..\n");
+        fprintf(stdout, "[..]: Config file not found. Generating new one..\n");
+        fflush(stdout);
         for (int Idx = 0; Idx < RELAY_COUNT; Idx++) {
             Config.RelayDelay[Idx] = DEFAULT_RELAY_DELAY;
         };
@@ -31,7 +32,8 @@ int8_t LoadConfig(void) {
     fclose(ConfigFile);
     cJSON *JsonObject = cJSON_Parse(ConfigBuffer);
     if (!JsonObject) {
-        fprintf(stderr, "[ERR]: Failed to parse config JSON\n");
+        fprintf(stdout, "[ERR]: Failed to parse config JSON\n");
+        fflush(stdout);
         return -EXIT_FAILURE;
     };
     cJSON *relayDelays = cJSON_GetObjectItem(JsonObject, "RelayDelay");
@@ -74,7 +76,8 @@ int8_t SaveConfig(void) {
     cJSON_AddNumberToObject(JsonObject, "RestPort", Config.RestPort);
     FILE *ConfigFile = fopen(getenv("CONFIG_PATH"), "w");
     if (!ConfigFile) {
-        fprintf(stderr, "[ERR]: Could not write to config file\n");
+        fprintf(stdout, "[ERR]: Could not write to config file\n");
+        fflush(stdout);
         cJSON_Delete(JsonObject);
         return -EXIT_FAILURE;
     };

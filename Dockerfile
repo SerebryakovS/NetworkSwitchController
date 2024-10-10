@@ -17,4 +17,3 @@ WORKDIR /app
 RUN make clean && make
 
 CMD ["./NetworkSwitchController"]
-
