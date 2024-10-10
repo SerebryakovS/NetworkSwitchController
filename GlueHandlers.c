@@ -289,5 +289,18 @@ void MonitorInputsAndTriggerWebhook() {
         };
     };
 };
-
+//
+const char* SetPassword(const char* NewPassword) {
+    if (NewPassword == NULL || strlen(NewPassword) >= sizeof(Config.Password)) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Invalid password length\"}\n");
+        return WebResponseBuffer;
+    };
+    strcpy(Config.Password, NewPassword);
+    if (SaveConfig() != EXIT_SUCCESS) {
+        snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"error\":\"Failed to save configuration\"}\n");
+        return WebResponseBuffer;
+    };
+    snprintf(WebResponseBuffer, WEB_RESPONSE_SIZE, "{\"success\": true}\n");
+    return WebResponseBuffer;
+};
 

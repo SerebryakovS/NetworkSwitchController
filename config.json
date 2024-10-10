@@ -1,8 +1,0 @@
-{
-	"RelayDelay":	[200, 200, 200, 200],
-	"InputDelay":	[200, 200, 200, 200],
-	"WebhookUrl":	"",
-	"Username":	"admin",
-	"Password":	"admin",
-	"RestPort":	8112
-}

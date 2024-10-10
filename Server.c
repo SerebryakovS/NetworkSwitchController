@@ -107,6 +107,13 @@ static int HandlePostRequest(struct MHD_Connection *Connection, const char* Url,
             return MHD_HTTP_BAD_REQUEST;
         };
         ResponseStr = SetWebhook(WebhookEndpoint->valuestring);
+    } else if (strcmp(Url, URI_SET_PASSWORD) == 0) {
+        const cJSON *NewPassword = cJSON_GetObjectItem(JsonObject, "new_pass");
+        if (!cJSON_IsString(NewPassword)) {
+            cJSON_Delete(JsonObject);
+            return MHD_HTTP_BAD_REQUEST;
+        };
+        ResponseStr = SetPassword(NewPassword->valuestring);
     } else {
         ResponseStr = "{\"error\":\"unknown endpoint received\"}\n";
     };

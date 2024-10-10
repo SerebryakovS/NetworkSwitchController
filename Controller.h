@@ -27,6 +27,7 @@ extern char WebResponseBuffer[WEB_RESPONSE_SIZE];
 #define URI_RELAY_DELAY  "/api/relay_delay"     // DONE
 #define URI_INPUT_DELAY  "/api/input_delay"     // DONE
 #define URI_SET_WEBHOOK  "/api/inputs_webhook"  // DONE
+#define URI_SET_PASSWORD "/api/set_password"    // DONE
 
 #define GPIO_CHIP_BASE_PATH "/dev/gpiochip"
 

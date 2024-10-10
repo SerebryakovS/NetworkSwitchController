@@ -1,9 +1,9 @@
 
 CC = gcc
 CFLAGS = -Wall
-LDFLAGS = -lgpiod -lmicrohttpd -lcjson -lcurl
+LDFLAGS = -lgpiod -lmicrohttpd -lcjson -lcurl -lpthread
 SRCS = Main.c GlueHandlers.c Server.c Config.c
-TARGET = out
+TARGET = NetworkSwitchController
 
 all: $(TARGET)
 

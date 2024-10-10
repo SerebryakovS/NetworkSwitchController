@@ -17,5 +17,13 @@ curl -X POST -u admin:admin -d "{\"relay_num\":1}" http://10.66.100.188:8112/api
 
 curl -X POST -u admin:admin -d "{\"io_number\": 1, \"delay_sec\": 1.5}" http://10.66.100.188:8112/api/relay_delay
 curl -X POST -u admin:admin -d "{\"io_number\": 1, \"delay_sec\": 1.5}" http://10.66.100.188:8112/api/input_delay
-curl -X POST -u admin:admin -d "{\"webhook_url\": \"http://example.com/webhook\"}v http://10.66.100.188:8112/api/inputs_webhook
+curl -X POST -u admin:admin -d "{\"webhook_url\": \"http://localhost/webhook\"}v http://10.66.100.188:8112/api/inputs_webhook
+
+
+
+
+#define DEFAULT_REST_PORT  8112
+#define DEFAULT_USERNAME   "admin"
+#define DEFAULT_PASSWORD   "admin"
+
 
